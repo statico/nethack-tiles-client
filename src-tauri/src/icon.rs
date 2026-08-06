@@ -89,13 +89,20 @@ impl Sheet {
 
 /// How the icon is laid out on its canvas.
 pub struct Style {
-    /// Fraction of the canvas the tile art spans before being rounded down to
+    /// Side of the rounded square as a fraction of the canvas. The rest is
+    /// transparent margin.
+    ///
+    /// macOS sizes every icon against the same grid rather than against the
+    /// canvas, so an icon drawn edge to edge is not merely larger, it is
+    /// wrong: it stands over its neighbours in the dock.
+    pub body: f32,
+    /// Fraction of the *body* the tile art spans before being rounded down to
     /// a whole zoom. Leaves the breathing room a dock or launcher expects,
     /// but not much: the rounded square is itself the icon's shape, so the
     /// padding sits inside it, and every pixel spent on padding is a pixel
     /// the figure does not get at 32px.
     pub coverage: f32,
-    /// Corner radius as a fraction of the canvas.
+    /// Corner radius as a fraction of the body.
     pub corner: f32,
     pub background: [u8; 4],
 }
@@ -103,22 +110,29 @@ pub struct Style {
 impl Default for Style {
     fn default() -> Self {
         Style {
+            // Apple's macOS grid: an 824px square with a 185.4px radius,
+            // centred on a 1024px canvas. Held as fractions of the canvas and
+            // of the body so any size renders the same shape.
+            body: 824.0 / 1024.0,
+            corner: 185.4 / 824.0,
             coverage: 0.82,
-            corner: 0.18,
-            // The terminal's own background, so the icon and the app it opens
-            // are recognisably the same thing.
-            background: [0x0d, 0x14, 0x16, 0xff],
+            // The floor the room is drawn on, so the squircle reads as more of
+            // the same map rather than as a border around it. The terminal's
+            // near-black was tried first. It matched the app it opens, but a
+            // dark room on a dark square lost its outline at dock size and the
+            // icon became a black tile with a smudge in it.
+            background: [0x47, 0x6c, 0x6b, 0xff],
         }
     }
 }
 
-/// The whole-number zoom to draw `art_px` of art at on a `canvas`-wide icon.
+/// The whole-number zoom to draw `art_px` of art at within `space` pixels.
 ///
 /// Whole numbers only: these are 16-pixel sprites, and any fractional scale
 /// resamples them into mush. Never returns zero, so a tiny canvas degrades to
 /// a cropped icon rather than an empty one.
-pub fn art_zoom(canvas: u32, art_px: u32, coverage: f32) -> u32 {
-    let ideal = (canvas as f32 * coverage) / art_px as f32;
+pub fn art_zoom(space: u32, art_px: u32, coverage: f32) -> u32 {
+    let ideal = (space as f32 * coverage) / art_px as f32;
     (ideal.floor() as u32).max(1)
 }
 
@@ -126,18 +140,21 @@ pub fn art_zoom(canvas: u32, art_px: u32, coverage: f32) -> u32 {
 pub fn compose(sheet: &Sheet, room: &Room, canvas: u32, style: &Style) -> RgbaImage {
     let side = room.side;
     let art_px = side * sheet.tile;
-    let zoom = art_zoom(canvas, art_px, style.coverage);
+    // The art is measured against the body, not the canvas. Against the canvas
+    // it would run under the rounded edge and be cut off by it.
+    let body = style.body * canvas as f32;
+    let zoom = art_zoom(body.round() as u32, art_px, style.coverage);
     let drawn = art_px * zoom;
     // Signed: a canvas too small for the art crops it evenly instead of
     // panicking on an underflow.
     let offset = (canvas as i64 - drawn as i64) / 2;
 
     let mut icon = RgbaImage::new(canvas, canvas);
-    let radius = style.corner * canvas as f32;
+    let radius = style.corner * body;
 
     for y in 0..canvas {
         for x in 0..canvas {
-            let cover = rounded_coverage(x, y, canvas, radius);
+            let cover = rounded_coverage(x, y, canvas, body, radius);
             if cover <= 0.0 {
                 continue;
             }
@@ -177,13 +194,17 @@ pub fn compose(sheet: &Sheet, room: &Room, canvas: u32, style: &Style) -> RgbaIm
 
 /// How much of the pixel at `(x, y)` falls inside the rounded square, 0 to 1.
 ///
+/// The square is `body` pixels across, centred on a `canvas`-wide icon, so
+/// everything beyond it is the margin and reads as zero.
+///
 /// Antialiased along the curve: a hard test leaves visibly stepped corners at
 /// the small sizes a menu bar or a tab strip uses.
-fn rounded_coverage(x: u32, y: u32, canvas: u32, radius: f32) -> f32 {
+fn rounded_coverage(x: u32, y: u32, canvas: u32, body: f32, radius: f32) -> f32 {
     let half = canvas as f32 / 2.0;
+    let extent = body / 2.0;
     // Offset from the centre, folded into one quadrant.
-    let ox = (x as f32 + 0.5 - half).abs() - (half - radius);
-    let oy = (y as f32 + 0.5 - half).abs() - (half - radius);
+    let ox = (x as f32 + 0.5 - half).abs() - (extent - radius);
+    let oy = (y as f32 + 0.5 - half).abs() - (extent - radius);
     // Signed distance to the rounded rectangle: positive outside, negative
     // inside. The second term is what makes it negative in the interior --
     // without it every pixel reads as exactly on the edge, and a square icon
@@ -219,8 +240,10 @@ mod tests {
 
     fn style() -> Style {
         Style {
-            // No rounding, so a test can read the corners without antialiasing.
+            // No rounding, so a test can read the corners without antialiasing,
+            // and no margin, so the art is measured against the whole canvas.
             corner: 0.0,
+            body: 1.0,
             ..Style::default()
         }
     }
@@ -343,12 +366,39 @@ mod tests {
     #[test]
     fn the_corners_are_rounded_away() {
         let sheet = flat_sheet(16, 40, 900);
-        let icon = compose(&sheet, &room(3), 480, &Style::default());
+        let icon = compose(&sheet, &room(3), 1024, &Style::default());
 
-        assert_eq!(icon.get_pixel(0, 0).0[3], 0, "corner must be transparent");
-        assert_eq!(icon.get_pixel(479, 0).0[3], 0);
-        assert_eq!(icon.get_pixel(240, 0).0[3], 255, "mid-edge must be solid");
-        assert_eq!(icon.get_pixel(240, 240).0[3], 255, "centre must be solid");
+        assert_eq!(icon.get_pixel(100, 100).0[3], 0, "corner must be transparent");
+        assert_eq!(icon.get_pixel(923, 100).0[3], 0);
+        assert_eq!(icon.get_pixel(512, 100).0[3], 255, "mid-edge must be solid");
+        assert_eq!(icon.get_pixel(512, 512).0[3], 255, "centre must be solid");
+    }
+
+    #[test]
+    fn the_body_leaves_the_margin_a_dock_icon_needs() {
+        // Apple's grid is an 824px rounded square on a 1024px canvas, which is
+        // 100px of nothing on each side. Drawn to the edge instead, the icon
+        // stands taller and wider than every neighbour in the dock.
+        let icon = compose(&flat_sheet(16, 40, 900), &room(5), 1024, &Style::default());
+
+        assert_eq!(icon.get_pixel(512, 99).0[3], 0, "margin above the body");
+        assert_eq!(icon.get_pixel(512, 100).0[3], 255, "body starts at 100");
+        assert_eq!(icon.get_pixel(512, 924).0[3], 0, "margin below it");
+        assert_eq!(icon.get_pixel(99, 512).0[3], 0, "and the same at the sides");
+    }
+
+    #[test]
+    fn the_art_stays_inside_the_body() {
+        // The art is measured against the body, not the canvas. Measured
+        // against the canvas it would spill over the rounded edge and be cut
+        // off by it.
+        let icon = compose(&flat_sheet(16, 40, 900), &room(5), 1024, &Style::default());
+
+        let drawn = 80 * art_zoom(824, 80, Style::default().coverage);
+        let offset = (1024 - drawn) / 2;
+        assert!(offset >= 100, "art starts at {offset}, inside the 100px margin");
+        assert!(drawn + offset <= 924, "and ends before the far edge of the body");
+        assert_eq!(icon.get_pixel(offset, offset).0[3], 255, "art is drawn there");
     }
 
     #[test]
@@ -356,6 +406,13 @@ mod tests {
         let sheet = flat_sheet(16, 40, 900);
         let icon = compose(&sheet, &room(3), 256, &Style::default());
         assert_eq!(icon.dimensions(), (256, 256));
+    }
+
+    #[test]
+    fn the_background_is_the_floor_the_room_stands_on() {
+        // Pinned because only the eye can catch the alternative: a dark
+        // background makes the icon read as a black square at dock size.
+        assert_eq!(Style::default().background, [0x47, 0x6c, 0x6b, 0xff]);
     }
 
     #[test]
