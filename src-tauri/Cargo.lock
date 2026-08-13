@@ -2781,7 +2781,7 @@ dependencies = [
 
 [[package]]
 name = "nethack-tiles-client"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "base64 0.23.0",
  "directories",

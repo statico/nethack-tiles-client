@@ -1,6 +1,6 @@
 [package]
 name = "nethack-tiles-client"
-version = "0.1.6"
+version = "0.1.7"
 description = "NetHack tiles client for public servers (NAO / Hardfought)"
 authors = ["Ian Langworth"]
 edition = "2021"
