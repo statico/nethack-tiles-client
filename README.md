@@ -1,5 +1,12 @@
 # NetHack Tiles Client
 
+[![CI](https://img.shields.io/github/actions/workflow/status/statico/nethack-tiles-client/ci.yml?branch=main)](https://github.com/statico/nethack-tiles-client/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/statico/nethack-tiles-client)](https://github.com/statico/nethack-tiles-client/releases/latest)
+[![macOS](https://img.shields.io/badge/macOS-black?logo=apple&logoColor=white)](https://github.com/statico/nethack-tiles-client/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white)](https://github.com/statico/nethack-tiles-client/releases/latest)
+[![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)](https://github.com/statico/nethack-tiles-client/releases/latest)
+[![License](https://img.shields.io/github/license/statico/nethack-tiles-client)](LICENSE)
+
 <img height="400" alt="CleanShot 2026-08-01 at 16 41 21@2x" src="https://github.com/user-attachments/assets/4bc250ee-b408-48ff-bea0-abd8d487fa27" />
 
 > [!NOTE]
