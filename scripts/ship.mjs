@@ -34,6 +34,31 @@ const TAP_TIMEOUT_MS = 5 * 60 * 1000;
 
 const POLL_MS = 15 * 1000;
 
+/** Version-bump commits. They say nothing about what changed. */
+const VERSION_BUMP = /^Release v?\d+\.\d+\.\d+$/;
+
+/**
+ * Walk older tags (newest first) until a range contains a real change.
+ *
+ * Failed `ship` retries leave extra local tags whose only commit is
+ * `Release v…`. Using the adjacent tag then makes the notes say "First
+ * release." even when the last published tag had real work.
+ *
+ * @param {string[]} tagsNewestFirst
+ * @param {(prev: string) => string[]} subjectsFrom
+ * @returns {string | null}
+ */
+export function tagBeforeChanges(tagsNewestFirst, subjectsFrom) {
+  for (const prev of tagsNewestFirst) {
+    const changes = subjectsFrom(prev).some((s) => {
+      const line = s.split("\n")[0].trim();
+      return line && !VERSION_BUMP.test(line);
+    });
+    if (changes) return prev;
+  }
+  return null;
+}
+
 /**
  * The release notes for a tag.
  *
@@ -44,7 +69,7 @@ const POLL_MS = 15 * 1000;
 export function releaseNotes(commits, { tag, previous, repo }) {
   const changes = commits
     .map((c) => c.split("\n")[0].trim())
-    .filter((c) => c && !/^Release v?\d+\.\d+\.\d+$/.test(c));
+    .filter((c) => c && !VERSION_BUMP.test(c));
 
   const lines = ["## Changes", ""];
   lines.push(...(changes.length ? changes.map((c) => `- ${c}`) : ["- First release."]));
@@ -103,7 +128,6 @@ async function main() {
 
   preflight();
 
-  const previous = lastTag();
   // Bumping is release.mjs's job, and it refuses a dirty tree or a used tag.
   node(["scripts/release.mjs", bump, ...(dryRun ? ["--dry-run"] : [])]);
   if (dryRun) {
@@ -113,6 +137,7 @@ async function main() {
 
   const version = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
   const tag = `v${version}`;
+  const previous = previousTagBefore(tag);
 
   step(`pushing ${tag}`);
   git(["push", "origin", "HEAD"]);
@@ -200,26 +225,18 @@ function preflight() {
 }
 
 /**
- * The tag before `tag`, for a changelog range.
+ * The last older tag whose range to `tag` contains a real change.
  *
  * @param {string} tag
  * @returns {string | null}
  */
 function previousTagBefore(tag) {
-  const result = spawnSync("git", ["describe", "--tags", "--abbrev=0", `${tag}^`], {
-    cwd: ROOT,
-    encoding: "utf8",
-  });
-  return result.status === 0 ? result.stdout.trim() : null;
-}
-
-/** @returns {string | null} */
-function lastTag() {
-  const result = spawnSync("git", ["describe", "--tags", "--abbrev=0"], {
-    cwd: ROOT,
-    encoding: "utf8",
-  });
-  return result.status === 0 ? result.stdout.trim() : null;
+  const tags = git(["tag", "--sort=-v:refname"]).trim().split("\n").filter(Boolean);
+  const i = tags.indexOf(tag);
+  const older = i === -1 ? tags : tags.slice(i + 1);
+  return tagBeforeChanges(older, (prev) =>
+    git(["log", `${prev}..${tag}`, "--pretty=%s"]).trim().split("\n").filter(Boolean),
+  );
 }
 
 /**

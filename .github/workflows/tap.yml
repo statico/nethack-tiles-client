@@ -22,6 +22,10 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          # This job only runs a node script. The default cache looks for
+          # pnpm because package.json names it, then fails before the cask
+          # is written. 0.1.4 through 0.1.8 never reached the tap.
+          package-manager-cache: false
 
       - name: Find the macOS build
         id: release

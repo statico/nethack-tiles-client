@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { platformAssetsReady, releaseNotes } from "./ship.mjs";
+import { platformAssetsReady, releaseNotes, tagBeforeChanges } from "./ship.mjs";
 
 const REPO = "https://github.com/statico/nethack-tiles-client";
 
@@ -82,5 +82,38 @@ describe("platformAssetsReady", () => {
 
   test("is false for an empty release", () => {
     expect(platformAssetsReady([])).toBe(false);
+  });
+});
+
+describe("tagBeforeChanges", () => {
+  test("walks past tags that only contain version bumps", () => {
+    // ship retried after a failed push, so v0.1.6 and v0.1.7 exist locally
+    // with nothing but "Release v…" commits. Notes for v0.1.8 must still
+    // reach the last real change.
+    const logs = {
+      "v0.1.7": ["Release v0.1.8"],
+      "v0.1.6": ["Release v0.1.8", "Release v0.1.7"],
+      "v0.1.5": [
+        "Release v0.1.8",
+        "Release v0.1.7",
+        "Release v0.1.6",
+        "Add a per-profile state log folder for LLM analysis of the current game.",
+      ],
+    };
+    expect(tagBeforeChanges(["v0.1.7", "v0.1.6", "v0.1.5"], (t) => logs[t])).toBe("v0.1.5");
+  });
+
+  test("returns the adjacent tag when it already has a real change", () => {
+    const logs = {
+      "v0.1.4": ["Release v0.1.5", "Fix the statue tile"],
+    };
+    expect(tagBeforeChanges(["v0.1.4"], (t) => logs[t])).toBe("v0.1.4");
+  });
+
+  test("returns null when every older tag is only version bumps", () => {
+    const logs = {
+      "v0.1.0": ["Release v0.1.1"],
+    };
+    expect(tagBeforeChanges(["v0.1.0"], (t) => logs[t])).toBe(null);
   });
 });
