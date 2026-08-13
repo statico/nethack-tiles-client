@@ -104,6 +104,12 @@ pub struct Profile {
     /// centred in the cell, rather than stretched to fill it.
     #[serde(default)]
     pub pixel_perfect: bool,
+    /// Write live game-state snapshots for an LLM to read.
+    #[serde(default)]
+    pub state_log_enabled: bool,
+    /// Directory those snapshots go in. Empty means "not set".
+    #[serde(default)]
+    pub state_log_directory: String,
 }
 
 impl Profile {
@@ -126,6 +132,8 @@ impl Profile {
             line_height: default_line_height(),
             letter_spacing: default_letter_spacing(),
             pixel_perfect: false,
+            state_log_enabled: false,
+            state_log_directory: String::new(),
         }
     }
 }
@@ -942,6 +950,8 @@ tilesetId = "vanilla-3.6.7-16"
         assert_eq!(p.line_height, 1.0);
         assert_eq!(p.letter_spacing, 0.0);
         assert!(!p.pixel_perfect);
+        assert!(!p.state_log_enabled);
+        assert!(p.state_log_directory.is_empty());
         assert_eq!(p.version, NetHackVersion::V36);
     }
 
@@ -964,6 +974,22 @@ tilesetId = "vanilla-3.6.7-16"
         assert_eq!(p.line_height, 1.4);
         assert_eq!(p.letter_spacing, 6.5);
         assert!(p.pixel_perfect);
+    }
+
+    #[test]
+    fn state_log_settings_survive_a_reload() {
+        let f = fixture("state-log");
+        let mut s = store(&f.path);
+        s.upsert(Profile {
+            state_log_enabled: true,
+            state_log_directory: "/tmp/nh-state".into(),
+            ..sample()
+        })
+        .unwrap();
+
+        let p = store(&f.path).get("nao").cloned().expect("profile");
+        assert!(p.state_log_enabled);
+        assert_eq!(p.state_log_directory, "/tmp/nh-state");
     }
 
     #[test]

@@ -370,6 +370,26 @@ and tile indices are positional.
 The tile art is from NetHack and is covered by the
 [NetHack General Public License](https://github.com/NetHack/NetHack/blob/NetHack-3.6.7_Released/dat/license).
 
+## State log
+
+A profile can write a folder of plain-text snapshots while you play, so you
+can point an LLM at the current game. Enable it on that server's **Edit**
+form, pick a folder, and connect. The game looks the same; the folder gets:
+
+| File | Contents |
+|---|---|
+| `README.md` | How to read the folder |
+| `screen.txt` | Current terminal, ASCII |
+| `level.txt` | Current level layout |
+| `messages.txt` | Last 1,000 top-line messages |
+| `inventory.txt` | Last inventory menu you opened |
+| `dungeon.txt` | Last `^o` overview |
+
+Inventory and the dungeon overview update only when you open them (`i` and
+`^o`). A multi-page inventory is joined as you flip through it. Those six
+files are replaced for a new session; anything else in the folder is left
+alone.
+
 ## Debugging tiles
 
 Two environment variables turn on diagnostics for a session, no rebuild needed:

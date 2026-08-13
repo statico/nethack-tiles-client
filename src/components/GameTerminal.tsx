@@ -8,8 +8,16 @@ import { metaByte } from "../lib/keys";
 import { paintOverlay } from "../lib/overlay";
 import type { Profile, TilesetPayload } from "../lib/protocol";
 import { StreamPlayer } from "../lib/streamPlayer";
+import { renderGrid, StateLog } from "../lib/stateLog";
 import { TileGrid } from "../lib/tileGrid";
-import { onStream, sessionResize, sessionWrite, sessionWriteBytes } from "../lib/tauri";
+import {
+  onStream,
+  reportFrontendError,
+  sessionResize,
+  sessionWrite,
+  sessionWriteBytes,
+  writeStateLog,
+} from "../lib/tauri";
 
 /**
  * The NetHack colour scheme, kept close to a classic 16-colour terminal so
@@ -36,6 +44,9 @@ const THEME = {
   brightCyan: "#4fd6da",
   brightWhite: "#f2ece0",
 };
+
+/** How long to let a stream settle before writing the state log. */
+const STATE_LOG_DEBOUNCE_MS = 150;
 
 interface Props {
   profile: Profile;
@@ -121,6 +132,31 @@ export function GameTerminal({
     const ctx = canvas.getContext("2d");
 
     const grid = new TileGrid();
+
+    const stateDir =
+      initial.stateLogEnabled && initial.stateLogDirectory ? initial.stateLogDirectory : "";
+    const stateLog = stateDir ? new StateLog() : null;
+    let writeTimer: number | null = null;
+    let pendingFiles: Record<string, string> | null = null;
+
+    const flushState = () => {
+      if (writeTimer !== null) {
+        window.clearTimeout(writeTimer);
+        writeTimer = null;
+      }
+      const files = pendingFiles;
+      pendingFiles = null;
+      if (!files || !stateDir) return;
+      void writeStateLog(stateDir, files).catch((error) => {
+        void reportFrontendError(`state log write failed: ${error}`);
+      });
+    };
+
+    const scheduleState = (files: Record<string, string>) => {
+      pendingFiles = files;
+      if (writeTimer !== null) window.clearTimeout(writeTimer);
+      writeTimer = window.setTimeout(flushState, STATE_LOG_DEBOUNCE_MS);
+    };
 
     /** Reads a cell from xterm's buffer; `null` means "outside the screen". */
     const readCell = (row: number, col: number): string | null => {
@@ -231,6 +267,19 @@ export function GameTerminal({
       grid.prune(readCell);
       mapObscured = player.mapObscured();
       requestPaint();
+      if (stateLog) {
+        const { rows, cols } = port.size();
+        scheduleState(
+          stateLog.ingest({
+            screen: renderGrid(rows, cols, readCell),
+            tiles: grid.entries().map(({ row, col, ch }) => ({ row, col, ch })),
+            rows,
+            cols,
+            mapObscured,
+            now: new Date().toISOString(),
+          }),
+        );
+      }
     });
 
     const unlistenStream = onStream((items) => player.feed(items));
@@ -293,6 +342,7 @@ export function GameTerminal({
     term.focus();
 
     return () => {
+      flushState();
       observer.disconnect();
       dataSub.dispose();
       void unlistenStream.then((un) => un());

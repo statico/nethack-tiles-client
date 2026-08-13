@@ -46,6 +46,10 @@ export const sessionResize = (cols: number, rows: number) =>
   invoke<void>("session_resize", { cols, rows });
 export const sessionDisconnect = () => invoke<void>("session_disconnect");
 
+/** Replaces the known files in a state-log directory. Unknown names are refused. */
+export const writeStateLog = (directory: string, files: Record<string, string>) =>
+  invoke<void>("state_log_write", { request: { directory, files } });
+
 /**
  * Hands a link to the desktop browser.
  *

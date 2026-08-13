@@ -16,6 +16,7 @@ use crate::local::{self, LocalConfig};
 use crate::profiles::{KeyringSecrets, Profile, ProfileStore, Transport, WithLegacy};
 use crate::session::{Session, SessionEvent};
 use crate::ssh::{self, SshConfig};
+use crate::statelog::{self, StateLogWrite};
 use crate::tileset::{Tileset, TilesetManifest};
 
 /// The tilesets shipped with the app, one per supported NetHack line.
@@ -417,6 +418,14 @@ pub async fn session_connect(
     if let Ok(mut store) = state.profiles.lock() {
         let _ = store.set_last_used(&profile.id);
     }
+
+    if profile.state_log_enabled && !profile.state_log_directory.is_empty() {
+        let dir = std::path::Path::new(&profile.state_log_directory);
+        if let Err(e) = statelog::clear(dir) {
+            log::warn!("could not clear the state log at {}: {e}", dir.display());
+        }
+    }
+
     Ok(())
 }
 
@@ -587,6 +596,14 @@ pub fn session_disconnect(state: State<'_, AppState>) -> CmdResult<()> {
         Some(s) => s.disconnect().map_err(|e| e.to_string()),
         None => Ok(()),
     }
+}
+
+/// Replaces files in the profile's state-log directory. Unknown names are
+/// refused by [`statelog`].
+#[tauri::command]
+pub fn state_log_write(request: StateLogWrite) -> CmdResult<()> {
+    let dir = std::path::Path::new(&request.directory);
+    statelog::write_files(dir, &request.files).map_err(|e| e.to_string())
 }
 
 fn with_session<T>(

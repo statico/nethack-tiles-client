@@ -86,6 +86,10 @@ export interface Profile {
   letterSpacing: number;
   /** Draw tiles at a whole multiple of 16px, centred, instead of stretched. */
   pixelPerfect: boolean;
+  /** Write live snapshots for an LLM into {@link stateLogDirectory}. */
+  stateLogEnabled: boolean;
+  /** Folder those snapshots go in. Empty means not set. */
+  stateLogDirectory: string;
 }
 
 /** The subset of a profile the in-game display panel edits. */

@@ -543,4 +543,15 @@ describe("StreamPlayer window tracking", () => {
 
     expect(player.mapObscured()).toBe(false);
   });
+
+  it("does not treat a menu as the map just because the menu draws a glyph", () => {
+    // Inventory lines carry object glyphs. If those reassign the map window,
+    // the overlay stays up and the state log never sees a covering menu.
+    const { term, player } = playing();
+
+    player.feed([select(6), glyph(800), text(")"), glyphEnd, text(" a spear")]);
+    term.drain();
+
+    expect(player.mapObscured()).toBe(true);
+  });
 });

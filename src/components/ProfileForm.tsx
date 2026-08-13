@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { Profile, TilesetManifest } from "../lib/protocol";
 import { hasSavedPassword } from "../lib/tauri";
 
@@ -234,6 +235,51 @@ export function ProfileForm({ profile, tilesets, onSave, onCancel, onDelete }: P
           </p>
         )}
         <p className="hint">Zoom multiplies the font size; tiles follow the cell.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>State log</legend>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={Boolean(draft.stateLogEnabled)}
+            onChange={(e) => set("stateLogEnabled", e.target.checked)}
+          />
+          <span>Write game state to a folder</span>
+        </label>
+        <div className="row">
+          <label className="grow">
+            <span>Folder</span>
+            <input
+              readOnly
+              value={draft.stateLogDirectory ?? ""}
+              placeholder="Not set"
+            />
+          </label>
+          <label>
+            <span>&nbsp;</span>
+            <button
+              type="button"
+              onClick={() => {
+                void open({
+                  directory: true,
+                  multiple: false,
+                  title: "State log folder",
+                }).then((selected) => {
+                  if (typeof selected === "string") set("stateLogDirectory", selected);
+                }).catch(() => {
+                  // Cancelled, or the dialog is missing (plain browser).
+                });
+              }}
+            >
+              Choose…
+            </button>
+          </label>
+        </div>
+        <p className="hint">
+          A live dump of the screen, messages, level, inventory and dungeon
+          overview, for an LLM to read. Nothing extra appears in the game.
+        </p>
       </fieldset>
 
       <div className="form-actions">

@@ -28,6 +28,7 @@ The app can also run a local NetHack in a pseudo-terminal.
 | Path | Contents |
 |---|---|
 | `src/lib/` | Pure frontend logic. Tests live beside each file. |
+| `src/lib/stateLog.ts` | LLM state-log snapshots from the terminal. |
 | `src/components/` | React components. `GameTerminal.tsx` owns the terminal and the tile canvas. |
 | `src-tauri/src/session.rs` | The transport interface. SSH and local play share it. |
 | `src-tauri/src/ssh.rs` | The SSH transport. |
@@ -37,6 +38,7 @@ The app can also run a local NetHack in a pseudo-terminal.
 | `src-tauri/src/tileset.rs` | Tile sheet geometry and manifests. |
 | `src-tauri/src/autologin.rs` | The dgamelaunch login state machine. |
 | `src-tauri/src/profiles.rs` | Profile storage. Passwords go to the keychain. |
+| `src-tauri/src/statelog.rs` | Writes the state-log directory. Only known filenames. |
 | `src-tauri/examples/` | Developer tools. `tiles2png` builds a tile sheet. `appicon` draws the icon. |
 | `scripts/` | Release scripts. Tests live beside each file. |
 

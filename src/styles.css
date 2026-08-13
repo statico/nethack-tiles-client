@@ -327,6 +327,10 @@ input[type="checkbox"] {
   accent-color: var(--gold);
 }
 
+input:read-only {
+  color: var(--parchment-dim);
+}
+
 input:focus-visible,
 select:focus-visible,
 button:focus-visible {

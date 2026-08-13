@@ -65,6 +65,8 @@ function newProfile(tilesetId: string): Profile {
     lineHeight: 1,
     letterSpacing: 0,
     pixelPerfect: false,
+    stateLogEnabled: false,
+    stateLogDirectory: "",
   };
 }
 

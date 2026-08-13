@@ -9,6 +9,7 @@ pub mod local;
 pub mod profiles;
 pub mod session;
 pub mod ssh;
+pub mod statelog;
 pub mod tileset;
 pub mod tilesrc;
 
@@ -37,6 +38,7 @@ pub fn run() {
             app::session_write_bytes,
             app::session_resize,
             app::session_disconnect,
+            app::state_log_write,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

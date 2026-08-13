@@ -89,9 +89,16 @@ export class StreamPlayer {
           const { tile, flags } = event;
           this.inGlyph = true;
           this.dirty = true;
-          // Glyphs only ever go to the map, so this is how we find out which
-          // window the map is without hardcoding a slot number.
-          if (this.currentWindow !== null) this.mapWindow = this.currentWindow;
+          // Glyphs usually go to the map. Inventory and other menus also
+          // emit them for object pictures, and those windows have higher
+          // ids. Once the map is known, do not follow glyphs into a menu --
+          // that would leave the overlay up and hide the covering window
+          // from the state log.
+          if (this.currentWindow !== null) {
+            if (this.mapWindow === null || this.currentWindow <= this.mapWindow) {
+              this.mapWindow = this.currentWindow;
+            }
+          }
           this.flush(() => {
             // The previous glyph's character is on screen by now; anchor it
             // before this one moves the cursor on.
