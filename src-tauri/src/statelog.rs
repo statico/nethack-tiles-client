@@ -17,6 +17,7 @@ pub const STATE_FILENAMES: &[&str] = &[
     "messages.txt",
     "inventory.txt",
     "dungeon.txt",
+    "containers.txt",
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -123,6 +124,16 @@ mod tests {
         let dir = TempDir::new("write");
         write_file(&dir.0, "screen.txt", "@\n").unwrap();
         assert_eq!(std::fs::read_to_string(dir.0.join("screen.txt")).unwrap(), "@\n");
+    }
+
+    #[test]
+    fn the_container_contents_file_is_a_known_name() {
+        let dir = TempDir::new("containers");
+        write_file(&dir.0, "containers.txt", "Contents of the sack:\n").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.0.join("containers.txt")).unwrap(),
+            "Contents of the sack:\n"
+        );
     }
 
     #[test]

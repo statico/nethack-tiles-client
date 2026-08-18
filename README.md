@@ -384,11 +384,12 @@ form, pick a folder, and connect. The game looks the same; the folder gets:
 | `messages.txt` | Last 1,000 top-line messages |
 | `inventory.txt` | Last inventory menu you opened |
 | `dungeon.txt` | Last `^o` overview |
+| `containers.txt` | Contents of each bag or box you looked inside |
 
-Inventory and the dungeon overview update only when you open them (`i` and
-`^o`). A multi-page inventory is joined as you flip through it. Those six
-files are replaced for a new session; anything else in the folder is left
-alone.
+Inventory, the dungeon overview, and container contents update only when you
+open them (`i`, `^o`, and looking inside a container). A multi-page listing is
+joined as you flip through it. Those seven files are replaced for a new
+session; anything else in the folder is left alone.
 
 ## Debugging tiles
 

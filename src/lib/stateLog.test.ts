@@ -116,6 +116,29 @@ describe("classifyOverlay", () => {
     expect(classifyOverlay(text)).toBe("inventory");
   });
 
+  it("detects a container contents window", () => {
+    // From end.c container_contents(): heading, blank line, items with two
+    // leading spaces, and a --More-- prompt even when everything fits.
+    const text = [
+      "Contents of the bag called bag of holding:",
+      "",
+      "  6106 gold pieces",
+      "  3 uncursed C-rations",
+      "  an uncursed candy bar",
+      "Dlvl:3 T:12829                --More--",
+    ].join("\n");
+    expect(classifyOverlay(text)).toBe("container");
+  });
+
+  it("does not treat a take-out menu as inventory", () => {
+    const text = [
+      "Take out what?",
+      "a - a scroll of light",
+      "b - a food ration",
+    ].join("\n");
+    expect(classifyOverlay(text)).toBe("other");
+  });
+
   it("detects a real tty dungeon overview", () => {
     const text = [
       "The Dungeons of Doom: levels 1 to 4",
@@ -143,7 +166,14 @@ describe("capturedFile", () => {
 describe("readmeText", () => {
   it("names every state file", () => {
     const text = readmeText();
-    for (const name of ["screen.txt", "level.txt", "messages.txt", "inventory.txt", "dungeon.txt"]) {
+    for (const name of [
+      "screen.txt",
+      "level.txt",
+      "messages.txt",
+      "inventory.txt",
+      "dungeon.txt",
+      "containers.txt",
+    ]) {
       expect(text).toContain(name);
     }
   });
@@ -269,6 +299,135 @@ describe("StateLog", () => {
     expect(files["inventory.txt"]).toContain("wand of magic missile");
   });
 
+  it("captures container contents into containers.txt", () => {
+    const log = new StateLog();
+    const files = log.ingest({
+      screen: [
+        "Contents of the bag called bag of holding:",
+        "",
+        "  6106 gold pieces",
+        "  an uncursed candy bar",
+        "Dlvl:3 T:12829                --More--",
+      ].join("\n"),
+      tiles: [],
+      rows: 8,
+      cols: 80,
+      mapObscured: false,
+      now: "2026-08-13T05:00:00.000Z",
+    });
+    expect(files["containers.txt"]).toContain("bag of holding");
+    expect(files["containers.txt"]).toContain("6106 gold pieces");
+    expect(files["containers.txt"]).toContain("Captured: 2026-08-13T05:00:00.000Z");
+  });
+
+  it("keeps the newest capture of each container", () => {
+    const log = new StateLog();
+    log.ingest({
+      screen: "Contents of the bag called bag of holding:\n\n  a lizard corpse\n--More--",
+      tiles: [],
+      rows: 6,
+      cols: 80,
+      mapObscured: false,
+      now: "2026-08-13T05:00:00.000Z",
+    });
+    log.ingest({
+      screen: "Contents of the large box:\n\n  a pick-axe\n--More--",
+      tiles: [],
+      rows: 6,
+      cols: 80,
+      mapObscured: false,
+      now: "2026-08-13T05:01:00.000Z",
+    });
+    const files = log.ingest({
+      screen: "Contents of the bag called bag of holding:\n\n  an opal ring\n--More--",
+      tiles: [],
+      rows: 6,
+      cols: 80,
+      mapObscured: false,
+      now: "2026-08-13T05:02:00.000Z",
+    });
+    expect(files["containers.txt"]).toContain("a pick-axe");
+    expect(files["containers.txt"]).toContain("an opal ring");
+    expect(files["containers.txt"]).not.toContain("lizard corpse");
+  });
+
+  it("joins the --More-- pages of one container", () => {
+    // A list taller than the screen clears it: no status lines, items keep
+    // their two leading spaces, and the next page starts over with no heading.
+    const log = new StateLog();
+    log.ingest({
+      screen: [
+        "Contents of the bag called bag of holding:",
+        "",
+        "  6106 gold pieces",
+        "--More--",
+      ].join("\n"),
+      tiles: [],
+      rows: 4,
+      cols: 80,
+      mapObscured: true,
+      now: "2026-08-13T05:00:00.000Z",
+    });
+    const files = log.ingest({
+      screen: ["  an uncursed opal ring", "  a blessed scroll of earth", "--More--"].join("\n"),
+      tiles: [],
+      rows: 4,
+      cols: 80,
+      mapObscured: true,
+      now: "2026-08-13T05:00:01.000Z",
+    });
+    expect(files["containers.txt"]).toContain("6106 gold pieces");
+    expect(files["containers.txt"]).toContain("opal ring");
+  });
+
+  it("does not append the map screen shown after the contents", () => {
+    const log = new StateLog();
+    log.ingest({
+      screen: [
+        "Contents of the sack:",
+        "",
+        "  3 uncursed C-rations",
+        "Dlvl:3 T:12829                --More--",
+      ].join("\n"),
+      tiles: [],
+      rows: 8,
+      cols: 80,
+      mapObscured: false,
+      now: "2026-08-13T05:00:00.000Z",
+    });
+    const files = log.ingest({
+      screen: ["You feel hungry.--More--", "....@...", "Dlvl:3 T:12829"].join("\n"),
+      tiles: [],
+      rows: 3,
+      cols: 80,
+      mapObscured: false,
+      now: "2026-08-13T05:00:01.000Z",
+    });
+    expect(files["containers.txt"]).not.toContain("hungry");
+  });
+
+  it("does not treat the contents view as a topline message or a level", () => {
+    const log = new StateLog();
+    log.ingest({
+      screen: "You hit the orc.\n @ \nDlvl:1",
+      tiles: [{ row: 1, col: 1, ch: "@" }],
+      rows: 3,
+      cols: 20,
+      mapObscured: false,
+      now: "2026-08-13T05:00:00.000Z",
+    });
+    const files = log.ingest({
+      screen: "Contents of the sack:\n\n  a pick-axe\n--More--",
+      tiles: [],
+      rows: 6,
+      cols: 80,
+      mapObscured: false,
+      now: "2026-08-13T05:00:01.000Z",
+    });
+    expect(files["messages.txt"]).toBe("You hit the orc.\n");
+    expect(files["level.txt"]).toContain("@");
+  });
+
   it("saves an overview without clobbering inventory", () => {
     const log = new StateLog();
     log.ingest({
@@ -300,6 +459,7 @@ describe("filesFromSnapshot", () => {
       messages: "",
       inventory: null,
       dungeon: null,
+      containers: null,
     });
     expect(files).toEqual({
       "README.md": readmeText(),

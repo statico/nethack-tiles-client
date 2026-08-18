@@ -14,9 +14,10 @@ export const STATE_FILENAMES = [
   "messages.txt",
   "inventory.txt",
   "dungeon.txt",
+  "containers.txt",
 ] as const;
 
-export type OverlayKind = "inventory" | "overview" | "other";
+export type OverlayKind = "inventory" | "overview" | "container" | "other";
 
 export interface LevelTile {
   row: number;
@@ -39,6 +40,7 @@ export interface LogSnapshot {
   messages: string;
   inventory: string | null;
   dungeon: string | null;
+  containers: string | null;
 }
 
 /** A cell reader: `null` or `""` is an empty cell. */
@@ -113,11 +115,36 @@ const ITEM_LINE =
 const NOT_INVENTORY =
   /pick up what|what do you want to drop|put (?:in|into) what|take out what|what do you want to name/iu;
 
+/**
+ * The heading `container_contents` puts above a contents window. The window
+ * clears the message row, so nothing sits left of it but the menu margin.
+ */
+const CONTAINER_HEADING = /^\s*Contents of (.+):$/mu;
+
+export function containerName(text: string): string | null {
+  const match = CONTAINER_HEADING.exec(text);
+  return match ? match[1] : null;
+}
+
+/**
+ * A contents list taller than the screen clears it and pages with --More--.
+ * The later pages carry no heading: just items, each behind the two-space
+ * margin `container_contents` prints. A status line rules a screen out,
+ * because the pager wiped those; this is what keeps the redrawn map, whose
+ * topline may also end in --More--, from being taken for another page.
+ */
+function isContentsContinuation(text: string): boolean {
+  if (/^Dlvl:/mu.test(text)) return false;
+  if (!/--More--$/mu.test(text)) return false;
+  return /^ {2}\S/mu.test(text);
+}
+
 const BRANCH_HEADING =
   /The Dungeons of Doom:|The Gnomish Mines:|Gehennom:|The Quest:|Sokoban:|Fort Ludios:|The Elemental Planes:|Vlad's Tower:/u;
 
 export function classifyOverlay(text: string): OverlayKind {
   if (isOverview(text)) return "overview";
+  if (containerName(text) !== null) return "container";
   if (isInventory(text)) return "inventory";
   return "other";
 }
@@ -157,6 +184,7 @@ anything else in this folder is left alone.
 | \`messages.txt\` | The last 1,000 distinct top-line messages. |
 | \`inventory.txt\` | Last inventory-like menu the player opened. Check the \`Captured:\` line; it may be stale. |
 | \`dungeon.txt\` | Last \`^o\` dungeon overview. Same staleness rule as inventory. |
+| \`containers.txt\` | Contents of each bag or box the player looked inside. Same staleness rule. |
 
 These files are deleted when a new session connects, so they never mix two games.
 `;
@@ -171,6 +199,7 @@ export function filesFromSnapshot(snapshot: LogSnapshot): Record<string, string>
   if (snapshot.level !== null) files["level.txt"] = snapshot.level;
   if (snapshot.inventory !== null) files["inventory.txt"] = snapshot.inventory;
   if (snapshot.dungeon !== null) files["dungeon.txt"] = snapshot.dungeon;
+  if (snapshot.containers !== null) files["containers.txt"] = snapshot.containers;
   return files;
 }
 
@@ -184,16 +213,24 @@ export class StateLog {
   private inventory: string | null = null;
   private dungeon: string | null = null;
   private inventoryPages = new Map<number, string>();
+  private containers = new Map<string, { pages: string[]; at: string }>();
+  private pendingContainer: string | null = null;
 
   ingest(input: ObserveInput): Record<string, string> {
     const kind = classifyOverlay(input.screen);
-    const menuUp = input.mapObscured || kind !== "other";
+    let containerPage = false;
 
     if (kind === "inventory") {
       this.inventory = this.captureInventory(input.screen, input.now);
+      this.pendingContainer = null;
     } else if (kind === "overview") {
       this.dungeon = capturedFile("last viewed dungeon overview (^o)", input.now, input.screen);
+      this.pendingContainer = null;
+    } else {
+      containerPage = this.captureContainer(input);
     }
+
+    const menuUp = input.mapObscured || kind !== "other" || containerPage;
 
     if (!menuUp) {
       const topline = input.screen.split("\n")[0] ?? "";
@@ -211,7 +248,45 @@ export class StateLog {
       messages: this.messages.render(),
       inventory: this.inventory,
       dungeon: this.dungeon,
+      containers: this.renderContainers(),
     });
+  }
+
+  /**
+   * Starts a capture on a `Contents of ...:` heading and extends it while
+   * --More-- pages of the same window follow. Returns whether this screen
+   * belonged to a contents window, so the caller can treat it as a menu.
+   */
+  private captureContainer(input: ObserveInput): boolean {
+    const name = containerName(input.screen);
+    if (name !== null) {
+      this.containers.set(name, { pages: [input.screen], at: input.now });
+      this.pendingContainer = name;
+      return true;
+    }
+    const pending = this.pendingContainer === null
+      ? undefined
+      : this.containers.get(this.pendingContainer);
+    if (pending !== undefined && isContentsContinuation(input.screen)) {
+      pending.pages.push(input.screen);
+      pending.at = input.now;
+      return true;
+    }
+    this.pendingContainer = null;
+    return false;
+  }
+
+  private renderContainers(): string | null {
+    if (this.containers.size === 0) return null;
+    return [...this.containers.entries()]
+      .map(([name, { pages, at }]) =>
+        capturedFile(
+          `last viewed contents of ${name}`,
+          at,
+          `${pages.map((page) => page.replace(/\n*$/u, "")).join("\n\n")}\n`,
+        ),
+      )
+      .join("\n");
   }
 
   private captureInventory(screen: string, now: string): string {
