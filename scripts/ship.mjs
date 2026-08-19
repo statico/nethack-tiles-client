@@ -53,7 +53,7 @@ export function releaseNotes(commits, { tag, previous, repo }) {
     "## Installing",
     "",
     "```sh",
-    "brew install statico/tap/nethack-tiles-client",
+    "brew install --cask statico/tap/nethack-tiles-client",
     "```",
     "",
     "Or take the build for your platform below. The macOS `.dmg` is signed and",
@@ -166,7 +166,7 @@ async function finish(tag, previous) {
 
   console.log(`\n${tag} is out.`);
   console.log(`  ${REPO}/releases/tag/${tag}`);
-  console.log("  brew install statico/tap/nethack-tiles-client");
+  console.log("  brew install --cask statico/tap/nethack-tiles-client");
 }
 
 /**
