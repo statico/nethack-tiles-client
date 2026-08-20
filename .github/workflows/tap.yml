@@ -44,12 +44,14 @@ jobs:
             --pattern "$asset" --dir dmg
           echo "sha256=$(sha256sum "dmg/$asset" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      # A fine-grained PAT with contents:write on statico/tap. The default
+      # The repository is statico/homebrew-tap. Homebrew shortens that to
+      # statico/tap in `brew install`, but git needs the real name. A
+      # fine-grained PAT with contents:write on it, because the built-in
       # GITHUB_TOKEN cannot reach another repository.
       - name: Check out the tap
         uses: actions/checkout@v5
         with:
-          repository: statico/tap
+          repository: statico/homebrew-tap
           token: ${{ secrets.TAP_GITHUB_TOKEN }}
           path: tap
 

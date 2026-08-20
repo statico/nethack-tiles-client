@@ -29,11 +29,23 @@ backend.
 
 ## Installing
 
-On macOS:
+On macOS, with [Homebrew](https://brew.sh):
 
 ```sh
-brew install statico/tap/nethack-tiles-client
+brew install --cask statico/tap/nethack-tiles-client
 ```
+
+That taps [statico/homebrew-tap](https://github.com/statico/homebrew-tap) the
+first time and puts the app in `/Applications`. Later:
+
+```sh
+brew upgrade --cask nethack-tiles-client   # get the newest release
+brew uninstall --cask nethack-tiles-client # remove the app
+```
+
+An uninstall keeps your profiles. Add `--zap` to delete them as well. Saved
+passwords are in the login keychain, so `--zap` does not remove those. A
+state-log folder is where you put it, and nothing removes it for you.
 
 Otherwise take the `.dmg`, `.msi`, `.AppImage` or `.deb` from the
 [releases page](https://github.com/statico/nethack-tiles-client/releases).
@@ -240,7 +252,7 @@ already embedded in the signature of every build.
 
 Publishing the draft on GitHub starts `tap.yml`, which checksums the `.dmg` and
 rewrites `Casks/nethack-tiles-client.rb` in
-[statico/tap](https://github.com/statico/tap).
+[statico/homebrew-tap](https://github.com/statico/homebrew-tap).
 
 **Upload the macOS build before publishing.** Publishing is the only thing that
 starts the tap job, so a `.dmg` that arrives afterwards updates nothing — the
@@ -256,8 +268,8 @@ gh workflow run tap.yml -f tag=v0.1.2
 Two things have to be set up on the repo first:
 
 - **`TAP_GITHUB_TOKEN`** — a fine-grained PAT with `contents: write` on
-  `statico/tap`. The built-in `GITHUB_TOKEN` cannot reach another repository,
-  so without this the tap step is the one that fails.
+  `statico/homebrew-tap`. The built-in `GITHUB_TOKEN` cannot reach another
+  repository, so without this the tap step is the one that fails.
 - **The first cask** — `tap.yml` writes `Casks/nethack-tiles-client.rb`, but
   the tap's README lists what it carries and is not touched by the workflow.
 
@@ -391,11 +403,12 @@ form, pick a folder, and connect. The game looks the same; the folder gets:
 | `messages.txt` | Last 1,000 top-line messages |
 | `inventory.txt` | Last inventory menu you opened |
 | `dungeon.txt` | Last `^o` overview |
+| `containers.txt` | Contents of each bag or box you looked inside |
 
-Inventory and the dungeon overview update only when you open them (`i` and
-`^o`). A multi-page inventory is joined as you flip through it. Those six
-files are replaced for a new session; anything else in the folder is left
-alone.
+Inventory, the dungeon overview, and container contents update only when you
+open them (`i`, `^o`, and looking inside a container). A multi-page listing is
+joined as you flip through it. Those seven files are replaced for a new
+session; anything else in the folder is left alone.
 
 ## Debugging tiles
 
