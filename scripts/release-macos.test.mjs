@@ -5,6 +5,7 @@ import {
   isNotarized,
   keychainAccount,
   missingTargets,
+  notaryAuth,
   pickLocalDmg,
   pickSigningIdentity,
 } from "./release-macos.mjs";
@@ -165,5 +166,41 @@ describe("isNotarized", () => {
       "origin=Developer ID Application: Ian Langworth (TA59XVWN77)",
     ].join("\n");
     expect(isNotarized(output)).toBe(false);
+  });
+});
+
+describe("notaryAuth", () => {
+  test("submits with the App Store Connect key when one is configured", () => {
+    // notarytool wants the .p8 itself, so the key path is passed through as is.
+    const args = notaryAuth({
+      APPLE_API_KEY_PATH: "/keys/AuthKey_ABC123.p8",
+      APPLE_API_KEY: "ABC123",
+      APPLE_API_ISSUER: "issuer-uuid",
+      APPLE_TEAM_ID: "TA59XVWN77",
+    });
+    expect(args).toEqual([
+      "--key",
+      "/keys/AuthKey_ABC123.p8",
+      "--key-id",
+      "ABC123",
+      "--issuer",
+      "issuer-uuid",
+    ]);
+  });
+
+  test("falls back to the Apple ID and its app-specific password", () => {
+    const args = notaryAuth({
+      APPLE_ID: "username@example.com",
+      APPLE_PASSWORD: "abcd-efgh-ijkl-mnop",
+      APPLE_TEAM_ID: "TA59XVWN77",
+    });
+    expect(args).toEqual([
+      "--apple-id",
+      "username@example.com",
+      "--team-id",
+      "TA59XVWN77",
+      "--password",
+      "abcd-efgh-ijkl-mnop",
+    ]);
   });
 });
