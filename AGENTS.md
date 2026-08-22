@@ -169,6 +169,12 @@ and waits for the Homebrew tap.
 Run it on a Mac. The Developer ID key stays in that keychain. The key never
 goes into a repository secret.
 
+The notary credentials come from `.env.release`, which git ignores. Copy
+`.env.release.example` and fill it in. It can name an App Store Connect key by
+path, or by 1Password reference to keep the key off the disk. With no such
+file, the release uses the Apple ID and app-specific password in the
+`nethack-tiles-notary` keychain item.
+
 If a step fails after the tag exists, finish the rest with `pnpm run ship --
 --finish`. Do not start again from the bump.
 

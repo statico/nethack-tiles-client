@@ -10,6 +10,27 @@
  *   security add-generic-password -s nethack-tiles-notary -a you@example.com -w
  *
  * (`-w` with no value prompts, keeping the password out of shell history.)
+ *
+ * An App Store Connect API key works instead. Set all three of these, and both
+ * the app and the disk image notarise with the key:
+ *
+ *   export APPLE_API_KEY_PATH=~/private_keys/AuthKey_XXXXXXXXXX.p8
+ *   export APPLE_API_KEY=XXXXXXXXXX
+ *   export APPLE_API_ISSUER=<issuer-uuid>
+ *
+ * The .p8 file itself is needed. A `notarytool store-credentials` profile is
+ * not enough: the Tauri bundler notarises the .app and reads only these three.
+ *
+ * To keep the key out of the file system, name a 1Password reference instead
+ * of a path. The key is then written to a private temporary file for the
+ * release and deleted when this exits:
+ *
+ *   export APPLE_API_KEY_OP="op://Private/Apple notary key/AuthKey.p8"
+ *
+ * Put those lines in `.env.release` and there is nothing to remember. That
+ * file is ignored by git; `.env.release.example` shows what goes in it. A
+ * variable already in the environment wins over the file.
+ *
  * Run this after `pnpm run release` has tagged the version and the tag has been
  * pushed, so there is a draft release to attach to:
  *
@@ -23,7 +44,8 @@
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -148,6 +170,11 @@ function main() {
     fail("the macOS release has to be built on macOS");
   }
 
+  // Nobody remembers three exports at release time. A variable that is already
+  // set wins, so a one-off `APPLE_API_KEY_OP=... pnpm run ship` still works.
+  const envFile = join(ROOT, ".env.release");
+  if (existsSync(envFile)) process.loadEnvFile(envFile);
+
   const argv = process.argv.slice(2);
   const skipBuild = argv.includes("--skip-build");
   const upload = !argv.includes("--no-upload");
@@ -233,6 +260,33 @@ function resolveCredentials() {
     );
   }
 
+  const reference = process.env.APPLE_API_KEY_OP?.trim();
+  const keyPath = process.env.APPLE_API_KEY_PATH?.trim();
+  const keyId = process.env.APPLE_API_KEY?.trim();
+  const issuer = process.env.APPLE_API_ISSUER?.trim();
+  if (reference || keyPath || keyId || issuer) {
+    if (!(reference || keyPath) || !keyId || !issuer) {
+      fail(
+        "an App Store Connect key needs APPLE_API_KEY_PATH or APPLE_API_KEY_OP,\n" +
+          "  plus APPLE_API_KEY and APPLE_API_ISSUER; unset them all to use the keychain",
+      );
+    }
+    // A path in .env.release goes through no shell, so ~ arrives unexpanded.
+    const path = reference
+      ? readOnePassword(reference)
+      : keyPath.replace(/^~(?=\/)/, homedir());
+    if (!existsSync(path)) {
+      fail(`APPLE_API_KEY_PATH points at nothing: ${path}`);
+    }
+    return {
+      APPLE_SIGNING_IDENTITY: identity,
+      APPLE_API_KEY_PATH: path,
+      APPLE_API_KEY: keyId,
+      APPLE_API_ISSUER: issuer,
+      APPLE_TEAM_ID: teamId,
+    };
+  }
+
   let stored = "";
   try {
     stored = capture("security", ["find-generic-password", "-s", NOTARY_ITEM]);
@@ -288,6 +342,61 @@ function verify(app) {
 }
 
 /**
+ * Puts a key held in 1Password where `notarytool` and the bundler can read it.
+ *
+ * Both want a path, so the key cannot stay in the vault. A temporary directory
+ * the user alone can enter is the next best thing, and it goes away on exit,
+ * including the exits `fail` takes.
+ *
+ * @param {string} reference an op:// secret reference
+ * @returns {string} the path of the key
+ */
+function readOnePassword(reference) {
+  let key = "";
+  try {
+    key = capture("op", ["read", reference]);
+  } catch {
+    fail(
+      `1Password could not read ${reference}.\n` +
+        "  check the reference, and sign in with: eval $(op signin)",
+    );
+  }
+
+  const dir = mkdtempSync(join(tmpdir(), "notary-"), { mode: 0o700 });
+  process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, "AuthKey.p8");
+  writeFileSync(path, key.endsWith("\n") ? key : `${key}\n`, { mode: 0o600 });
+  return path;
+}
+
+/**
+ * The arguments that tell `notarytool` who is submitting.
+ *
+ * @param {Record<string, string>} credentials
+ * @returns {string[]}
+ */
+export function notaryAuth(credentials) {
+  if (credentials.APPLE_API_KEY_PATH) {
+    return [
+      "--key",
+      credentials.APPLE_API_KEY_PATH,
+      "--key-id",
+      credentials.APPLE_API_KEY,
+      "--issuer",
+      credentials.APPLE_API_ISSUER,
+    ];
+  }
+  return [
+    "--apple-id",
+    credentials.APPLE_ID,
+    "--team-id",
+    credentials.APPLE_TEAM_ID,
+    "--password",
+    credentials.APPLE_PASSWORD,
+  ];
+}
+
+/**
  * Notarises the disk image itself, which the bundler does not do.
  *
  * Tauri notarises the .app and then builds the .dmg around it, so the image
@@ -305,18 +414,7 @@ function notariseDisk(dmg, credentials) {
     console.log("disk image already notarised");
   } else {
     console.log("notarising the disk image (a few minutes)");
-    run("xcrun", [
-      "notarytool",
-      "submit",
-      dmg,
-      "--apple-id",
-      credentials.APPLE_ID,
-      "--team-id",
-      credentials.APPLE_TEAM_ID,
-      "--password",
-      credentials.APPLE_PASSWORD,
-      "--wait",
-    ]);
+    run("xcrun", ["notarytool", "submit", dmg, ...notaryAuth(credentials), "--wait"]);
     run("xcrun", ["stapler", "staple", dmg]);
   }
 

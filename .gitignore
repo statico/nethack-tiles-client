@@ -33,3 +33,6 @@ src-tauri/target
 
 # Playwright MCP scratch output
 .playwright-mcp
+
+# The notary credentials this Mac releases with. See .env.release.example.
+.env.release
