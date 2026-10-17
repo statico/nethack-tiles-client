@@ -53,3 +53,29 @@ export function metaByte(event: Chord): number | null {
   // by layout -- has no meta command, so leave it alone.
   return null;
 }
+
+/**
+ * True for the keys a browser reads as "reload the page": F5, and R with
+ * Control or Command (Shift for a hard reload).
+ *
+ * The app runs in a webview, and a reload there drops the game screen but not
+ * the connection behind it. A game window never wants that, so these keys are
+ * blocked.
+ */
+export function isReloadChord(event: Chord): boolean {
+  if (event.code === "F5") return true;
+  return event.code === "KeyR" && (event.ctrlKey || event.metaKey) && !event.altKey;
+}
+
+/**
+ * True for Ctrl+R, NetHack's "redraw the screen" command.
+ *
+ * Inside the terminal, xterm sends it like any other key. Pressed anywhere
+ * else in the game window (the display panel, say), it is still meant for the
+ * game rather than the webview.
+ */
+export function isRedrawChord(event: Chord): boolean {
+  return (
+    event.code === "KeyR" && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey
+  );
+}

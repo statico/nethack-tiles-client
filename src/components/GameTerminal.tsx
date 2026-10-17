@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 
-import { metaByte } from "../lib/keys";
+import { isRedrawChord, metaByte } from "../lib/keys";
 import { paintOverlay } from "../lib/overlay";
 import type { Profile, TilesetPayload } from "../lib/protocol";
 import { StreamPlayer } from "../lib/streamPlayer";
@@ -341,8 +341,20 @@ export function GameTerminal({
     refitWhenFontArrives(initial.fontFamily, term.options.fontSize ?? 16);
     term.focus();
 
+    // Ctrl+R is NetHack's redraw. Inside the terminal xterm sends it; pressed
+    // elsewhere in the window (the display panel, say) it is still meant for
+    // the game, not the webview.
+    const onWindowKey = (e: KeyboardEvent) => {
+      if (!isRedrawChord(e) || host.contains(e.target as Node)) return;
+      e.preventDefault();
+      void sessionWriteBytes([0x12]);
+      term.focus();
+    };
+    window.addEventListener("keydown", onWindowKey);
+
     return () => {
       flushState();
+      window.removeEventListener("keydown", onWindowKey);
       observer.disconnect();
       dataSub.dispose();
       void unlistenStream.then((un) => un());

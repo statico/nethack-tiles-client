@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { metaByte } from "./keys";
+import { isRedrawChord, isReloadChord, metaByte } from "./keys";
 
 /** A keydown as the webview reports it, with Option held unless overridden. */
 function press(over: Partial<KeyboardEvent> = {}): KeyboardEvent {
@@ -48,5 +48,45 @@ describe("metaByte", () => {
   it("ignores keys with no meta form", () => {
     expect(metaByte(press({ code: "ArrowLeft", key: "ArrowLeft" }))).toBeNull();
     expect(metaByte(press({ code: "F5", key: "F5" }))).toBeNull();
+  });
+});
+
+/** A plain keydown with no modifiers unless overridden. */
+function key(over: Partial<KeyboardEvent> = {}): KeyboardEvent {
+  return press({ altKey: false, code: "KeyR", key: "r", ...over });
+}
+
+describe("isReloadChord", () => {
+  it("catches F5", () => {
+    expect(isReloadChord(key({ code: "F5", key: "F5" }))).toBe(true);
+  });
+
+  it("catches Ctrl+R and Command+R, with or without Shift", () => {
+    expect(isReloadChord(key({ ctrlKey: true }))).toBe(true);
+    expect(isReloadChord(key({ metaKey: true }))).toBe(true);
+    expect(isReloadChord(key({ ctrlKey: true, shiftKey: true }))).toBe(true);
+  });
+
+  it("leaves a plain r alone, which NetHack reads as 'read'", () => {
+    expect(isReloadChord(key())).toBe(false);
+  });
+
+  it("leaves Option+r alone, which is a meta command", () => {
+    expect(isReloadChord(key({ altKey: true, ctrlKey: true }))).toBe(false);
+  });
+});
+
+describe("isRedrawChord", () => {
+  it("is Ctrl+R", () => {
+    expect(isRedrawChord(key({ ctrlKey: true }))).toBe(true);
+  });
+
+  it("is not Command+R or Ctrl+Shift+R", () => {
+    expect(isRedrawChord(key({ metaKey: true }))).toBe(false);
+    expect(isRedrawChord(key({ ctrlKey: true, shiftKey: true }))).toBe(false);
+  });
+
+  it("is not F5", () => {
+    expect(isRedrawChord(key({ code: "F5", key: "F5", ctrlKey: true }))).toBe(false);
   });
 });
