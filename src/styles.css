@@ -443,6 +443,7 @@ code {
   padding: 0;
   gap: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 .play-bar {
@@ -495,6 +496,10 @@ code {
   position: relative;
   padding: var(--cell);
   background: var(--deep);
+  /* A fitted terminal can round a few pixels past the host. If that overflow
+     shows, it adds scrollbars, the scrollbars shrink the host, the next fit is
+     one cell smaller, and the scrollbars go away again: a resize loop. */
+  overflow: hidden;
 }
 
 .display-panel {

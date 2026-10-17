@@ -9,6 +9,7 @@ import { paintOverlay } from "../lib/overlay";
 import type { Profile, TilesetPayload } from "../lib/protocol";
 import { StreamPlayer } from "../lib/streamPlayer";
 import { renderGrid, StateLog } from "../lib/stateLog";
+import { clampSize, sameSize, type TermSize } from "../lib/termSize";
 import { TileGrid } from "../lib/tileGrid";
 import {
   onStream,
@@ -47,6 +48,9 @@ const THEME = {
 
 /** How long to let a stream settle before writing the state log. */
 const STATE_LOG_DEBOUNCE_MS = 150;
+
+/** How long the terminal size must hold before the game is told about it. */
+const RESIZE_SETTLE_MS = 200;
 
 interface Props {
   profile: Profile;
@@ -298,9 +302,36 @@ export function GameTerminal({
       return false;
     });
 
+    let sentSize: TermSize | null = null;
+    let resizeTimer: number | null = null;
+
+    /**
+     * Tells the game the new size once the layout has settled.
+     *
+     * Each resize is a SIGWINCH, and a burst of them can make the server drop
+     * the session. So only the last size of a burst is sent, and only if it
+     * differs from the size the game already has.
+     */
+    const scheduleResize = (size: TermSize) => {
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        resizeTimer = null;
+        if (sameSize(sentSize, size)) return;
+        sentSize = size;
+        void sessionResize(size.cols, size.rows);
+      }, RESIZE_SETTLE_MS);
+    };
+
     const applyFit = () => {
-      fit.fit();
-      void sessionResize(term.cols, term.rows);
+      const proposed = fit.proposeDimensions();
+      if (!proposed || !Number.isFinite(proposed.cols) || !Number.isFinite(proposed.rows)) {
+        return;
+      }
+      const size = clampSize(proposed);
+      if (size.cols !== term.cols || size.rows !== term.rows) {
+        term.resize(size.cols, size.rows);
+      }
+      scheduleResize(size);
       // The cell geometry moved, so every tile's pixel rect is now wrong.
       grid.resolve(readCell);
       requestPaint();
@@ -343,6 +374,7 @@ export function GameTerminal({
 
     return () => {
       flushState();
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
       observer.disconnect();
       dataSub.dispose();
       void unlistenStream.then((un) => un());
