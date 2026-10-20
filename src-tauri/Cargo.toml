@@ -31,7 +31,7 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
-russh = "0.62.5"
+russh = "0.64.1"
 tokio = { version = "1.53.1", features = ["full"] }
 directories = "6.0.0"
 toml = "1.1.4"
